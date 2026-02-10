@@ -1,0 +1,37 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\Users\\user\\source\\repos\\Directional Defender\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{BC5C146C-C3F1-453C-B2FE-0629DCBDE388}|Directional Defender\\Directional Defender.csproj|c:\\users\\user\\source\\repos\\directional defender\\directional defender\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{BC5C146C-C3F1-453C-B2FE-0629DCBDE388}|Directional Defender\\Directional Defender.csproj|solutionrelative:directional defender\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 0,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "Program.cs",
+              "DocumentMoniker": "C:\\Users\\user\\source\\repos\\Directional Defender\\Directional Defender\\Program.cs",
+              "RelativeDocumentMoniker": "Directional Defender\\Program.cs",
+              "ToolTip": "C:\\Users\\user\\source\\repos\\Directional Defender\\Directional Defender\\Program.cs",
+              "RelativeToolTip": "Directional Defender\\Program.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAYAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-09-09T13:25:38.962Z",
+              "EditorCaption": ""
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

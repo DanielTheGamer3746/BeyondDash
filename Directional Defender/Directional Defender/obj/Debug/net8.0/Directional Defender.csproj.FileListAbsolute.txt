@@ -1,0 +1,5 @@
+C:\Users\user\source\repos\Directional Defender\Directional Defender\obj\Debug\net8.0\Directional Defender.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\user\source\repos\Directional Defender\Directional Defender\obj\Debug\net8.0\Directional Defender.AssemblyInfoInputs.cache
+C:\Users\user\source\repos\Directional Defender\Directional Defender\obj\Debug\net8.0\Directional Defender.AssemblyInfo.cs
+C:\Users\user\source\repos\Directional Defender\Directional Defender\obj\Debug\net8.0\Directional Defender.csproj.CoreCompileInputs.cache
+C:\Users\user\source\repos\Directional Defender\Directional Defender\obj\Debug\net8.0\Directional Defender.csproj.AssemblyReference.cache
