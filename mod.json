@@ -11,6 +11,7 @@
 	"version": "v1.1.0",
 	"developer": "DanielTheGamer",
 	"description": "Adds new main levels!",
+  "binary": "danielthegamer.beyond-dash.dll",
 	"dependencies": {
 		"geode.node-ids": ">=v1.20.0"
 	}
