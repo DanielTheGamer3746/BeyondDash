@@ -40,6 +40,8 @@ public:
             { 104138684, "Explorers", 17, 60, true, {1183462}, {80, 40, 160} },
             // Level 2: Rise
             { 102184114, "Rise", 10, 50, false, {10007245, 10006699, 10004345}, {144, 150, 35} },
+			// Level 3: Theory of Everything 3
+			{ 110790559, "Theory of Everything 3", 15, 60, true, {738567}, {164, 21, 21} },
         };
     }
 

@@ -1,3 +1,3 @@
-# Template Mod
+# Beyond Dash
 
 Play More Main Levels!

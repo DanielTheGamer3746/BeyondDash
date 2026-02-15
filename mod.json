@@ -1,5 +1,5 @@
 {
-	"geode": "5.0.0-alpha.2",
+	"geode": "5.0.0-beta.1",
 	"gd": {
 		"win": "2.2081",
 		"android": "2.2081",
@@ -8,14 +8,14 @@
 	},
 	"id": "danielthegamer.beyond-dash",
 	"name": "Beyond Dash",
-	"version": "v1.1.0",
+	"version": "v1.2.6",
 	"developer": "DanielTheGamer",
 	"description": "Adds new main levels!",
 	"binary": {
 		"win": "danielthegamer.beyond-dash.dll",
-		"android": "libbeyond-dash.so",
-		"mac": "beyond-dash.dylib",
-		"ios": "libbeyond-dash.dylib"
+		"android": "danielthegamer.beyond-dash.so",
+		"mac": "danielthegamer.beyond-dash.dylib",
+		"ios": "danielthegamer.beyond-dash.dylib"
 	},
 	"dependencies": {
 		"geode.node-ids": ">=v1.20.0"
