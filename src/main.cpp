@@ -19,10 +19,6 @@
 
 using namespace geode::prelude;
 
-// =================================================================
-// 1. DATA & DEFINITIONS
-// =================================================================
-
 struct LevelDef {
     int id;
     std::string name;
@@ -33,9 +29,9 @@ struct LevelDef {
     ccColor3B color;
 };
 
-class LevelManager {
-public:
-    static const std::vector<LevelDef>& getLevels() {
+// Global level data
+namespace LevelData {
+    const std::vector<LevelDef>& get() {
         static std::vector<LevelDef> levels = {
             { 104138684, "Explorers", 17, 60, true, {1183462}, {80, 40, 160} },
             { 102184114, "Rise", 10, 50, false, {10007245, 10006699, 10004345}, {144, 150, 35} },
@@ -44,7 +40,7 @@ public:
         return levels;
     }
 
-    static GJGameLevel* createLevelObject(const LevelDef& def) {
+    GJGameLevel* buildGameLevel(const LevelDef& def) {
         auto level = GJGameLevel::create();
         level->m_levelID = def.id;
         level->m_levelName = def.name;
@@ -57,21 +53,18 @@ public:
             level->m_audioTrack = def.songIDs[0];
         }
 
-        if (auto savedLevel = GameLevelManager::sharedState()->getSavedLevel(def.id)) {
-            level->m_normalPercent = savedLevel->m_normalPercent;
-            level->m_practicePercent = savedLevel->m_practicePercent;
-            level->m_orbCompletion = savedLevel->m_orbCompletion;
-            level->m_newNormalPercent2 = savedLevel->m_newNormalPercent2;
-            level->m_coins = savedLevel->m_coins;
+        // restore user progress if it exists
+        if (auto saved = GameLevelManager::sharedState()->getSavedLevel(def.id)) {
+            level->m_normalPercent = saved->m_normalPercent;
+            level->m_practicePercent = saved->m_practicePercent;
+            level->m_orbCompletion = saved->m_orbCompletion;
+            level->m_newNormalPercent2 = saved->m_newNormalPercent2;
+            level->m_coins = saved->m_coins;
         }
 
         return level;
     }
-};
-
-// =================================================================
-// 2. LEVEL LAUNCHER
-// =================================================================
+}
 
 class LevelLauncher : public CCObject, public LevelDownloadDelegate, public MusicDownloadDelegate {
     int m_levelID;
@@ -95,10 +88,10 @@ public:
     }
 
     void start() {
-        auto scene = CCDirector::sharedDirector()->getRunningScene();
+        auto scene = CCDirector::get()->getRunningScene();
         m_loadingCircle = LoadingCircle::create();
         m_loadingCircle->setParentLayer(nullptr);
-        m_loadingCircle->setPosition(CCDirector::sharedDirector()->getWinSize() / 2);
+        m_loadingCircle->setPosition(CCDirector::get()->getWinSize() / 2);
 
         if (scene) {
             scene->addChild(m_loadingCircle, 999);
@@ -106,10 +99,10 @@ public:
         }
 
         auto glm = GameLevelManager::sharedState();
-        auto existingLevel = glm->getSavedLevel(m_levelID);
+        auto existing = glm->getSavedLevel(m_levelID);
 
-        if (existingLevel && std::string_view(existingLevel->m_levelString).length() > 0) {
-            this->checkAudioAndPlay(existingLevel);
+        if (existing && std::string_view(existing->m_levelString).length() > 0) {
+            verifyAudioAndPlay(existing);
         }
         else {
             glm->m_levelDownloadDelegate = this;
@@ -119,100 +112,89 @@ public:
 
     void levelDownloadFinished(GJGameLevel* level) override {
         GameLevelManager::sharedState()->m_levelDownloadDelegate = nullptr;
-        checkAudioAndPlay(level);
+        verifyAudioAndPlay(level);
     }
 
     void levelDownloadFailed(int levelID) override {
         GameLevelManager::sharedState()->m_levelDownloadDelegate = nullptr;
         if (m_loadingCircle) m_loadingCircle->fadeAndRemove();
-        Notification::create("Failed to download level", NotificationIcon::Error)->show();
+        Notification::create("Download failed", NotificationIcon::Error)->show();
     }
 
-    void checkAudioAndPlay(GJGameLevel* level) {
-        int songID = level->m_audioTrack;
-        if (songID == 0) songID = m_songID;
-
+    void verifyAudioAndPlay(GJGameLevel* level) {
+        int songID = level->m_audioTrack == 0 ? m_songID : level->m_audioTrack;
         auto mdm = MusicDownloadManager::sharedState();
 
         if (songID == 0 || mdm->isSongDownloaded(songID)) {
-            enterLevel(level);
+            launchLevel(level);
         }
         else {
             mdm->downloadSong(songID);
-            enterLevel(level);
+            launchLevel(level); // todo: maybe wait for download to finish first?
         }
     }
 
     void downloadSongFinished(int songID) override {
         auto level = GameLevelManager::sharedState()->getSavedLevel(m_levelID);
-        if (level) enterLevel(level);
+        if (level) launchLevel(level);
     }
 
     void downloadSongFailed(int songID, GJSongError error) override {
         if (m_loadingCircle) m_loadingCircle->fadeAndRemove();
-        Notification::create("Failed to download song", NotificationIcon::Error)->show();
+        Notification::create("Song download failed", NotificationIcon::Error)->show();
     }
 
     void loadSongInfoFinished(SongInfoObject*) override {}
     void loadSongInfoFailed(int, GJSongError) override {}
 
-    void enterLevel(GJGameLevel* level) {
+    void launchLevel(GJGameLevel* level) {
         if (m_loadingCircle) {
             m_loadingCircle->fadeAndRemove();
             m_loadingCircle = nullptr;
         }
 
         auto scene = CCScene::create();
-        auto playLayer = PlayLayer::create(level, false, false);
-        scene->addChild(playLayer);
-        CCDirector::sharedDirector()->replaceScene(CCTransitionFade::create(0.5f, scene));
+        scene->addChild(PlayLayer::create(level, false, false));
+        CCDirector::get()->replaceScene(CCTransitionFade::create(0.5f, scene));
     }
 };
 
-// =================================================================
-// 3. UI POPUPS
-// =================================================================
-
-// Replaced geode::Popup with the classic FLAlertLayer for maximum compatibility
 class SongListPopup : public FLAlertLayer {
 protected:
     LevelDef m_level;
 
     bool init(LevelDef const& level) {
         m_level = level;
-
-        // Initialize the base alert layer with a dim background (150 opacity)
         if (!FLAlertLayer::init(150)) return false;
 
-        auto winSize = CCDirector::sharedDirector()->getWinSize();
+        auto winSize = CCDirector::get()->getWinSize();
 
-        // Create the popup background
-        auto bg = CCScale9Sprite::create("GJ_square01.png", { 0, 0, 80, 80 });
         float width = 260.0f;
         float height = std::max(160.0f, 80.0f + (level.songIDs.size() * 35.0f));
+
+        auto bg = CCScale9Sprite::create("GJ_square01.png", { 0, 0, 80, 80 });
         bg->setContentSize({ width, height });
         bg->setPosition(winSize / 2);
-        this->m_mainLayer->addChild(bg, -1);
+        m_mainLayer->addChild(bg, -1);
 
-        // Title
         auto title = CCLabelBMFont::create("Level Audio", "goldFont.fnt");
         title->setPosition({ winSize.width / 2, winSize.height / 2 + height / 2 - 20 });
         title->setScale(0.7f);
-        this->m_mainLayer->addChild(title);
+        m_mainLayer->addChild(title);
 
-        // Close Button
-        auto closeBtnSpr = CCSprite::createWithSpriteFrameName("GJ_closeBtn_001.png");
-        auto closeBtn = CCMenuItemSpriteExtra::create(closeBtnSpr, this, menu_selector(SongListPopup::onClose));
+        auto closeBtn = CCMenuItemSpriteExtra::create(
+            CCSprite::createWithSpriteFrameName("GJ_closeBtn_001.png"),
+            this, menu_selector(SongListPopup::onClose)
+        );
 
         auto closeMenu = CCMenu::create();
         closeMenu->setPosition({ winSize.width / 2 - width / 2 + 5, winSize.height / 2 + height / 2 - 5 });
         closeMenu->addChild(closeBtn);
-        this->m_mainLayer->addChild(closeMenu);
+        m_mainLayer->addChild(closeMenu);
 
-        // Main content menu
         auto menu = CCMenu::create();
         menu->setPosition(winSize.width / 2, winSize.height / 2 - 15);
-        this->m_mainLayer->addChild(menu);
+        m_mainLayer->addChild(menu);
 
         if (level.songIDs.empty()) {
             auto label = CCLabelBMFont::create("No custom songs.", "bigFont.fnt");
@@ -227,33 +209,32 @@ protected:
             int songID = level.songIDs[i];
 
             auto label = CCLabelBMFont::create(fmt::format("Song ID: {}", songID).c_str(), "bigFont.fnt");
-            // Slightly reduced scale so long IDs don't get too wide
             label->setScale(0.45f);
             label->setAnchorPoint({ 0.0f, 0.5f });
-            // Moved further to the left edge of the popup
             label->setPosition({ -115.0f, startY - (i * 35.0f) });
             menu->addChild(label);
 
-            auto dlBtnSpr = ButtonSprite::create("Get", 30, true, "goldFont.fnt", "GJ_button_01.png", 30, 0.6f);
-            auto dlBtn = CCMenuItemSpriteExtra::create(dlBtnSpr, this, menu_selector(SongListPopup::onDownloadSong));
-            // Moved further to the right edge of the popup
+            auto dlBtn = CCMenuItemSpriteExtra::create(
+                ButtonSprite::create("Get", 30, true, "goldFont.fnt", "GJ_button_01.png", 30, 0.6f),
+                this, menu_selector(SongListPopup::onDownloadSong)
+            );
             dlBtn->setPosition({ 85.0f, startY - (i * 35.0f) });
             dlBtn->setTag(songID);
             menu->addChild(dlBtn);
         }
 
-        this->setKeypadEnabled(true);
-        this->setTouchEnabled(true);
+        setKeypadEnabled(true);
+        setTouchEnabled(true);
         return true;
     }
 
     void onClose(CCObject*) {
-        this->setKeyboardEnabled(false);
-        this->removeFromParentAndCleanup(true);
+        setKeyboardEnabled(false);
+        removeFromParentAndCleanup(true);
     }
 
     void keyBackClicked() override {
-        this->onClose(nullptr);
+        onClose(nullptr);
     }
 
     void onDownloadSong(CCObject* sender) {
@@ -261,11 +242,11 @@ protected:
         auto mdm = MusicDownloadManager::sharedState();
 
         if (mdm->isSongDownloaded(songID)) {
-            Notification::create("Song already downloaded!", NotificationIcon::Success)->show();
+            Notification::create("Already downloaded!", NotificationIcon::Success)->show();
         }
         else {
             mdm->downloadSong(songID);
-            Notification::create(fmt::format("Triggered download for {}", songID), NotificationIcon::Loading)->show();
+            Notification::create(fmt::format("Downloading {}", songID), NotificationIcon::Loading)->show();
         }
     }
 
@@ -280,10 +261,6 @@ public:
         return nullptr;
     }
 };
-
-// =================================================================
-// 4. CUSTOM LAYER
-// =================================================================
 
 class BeyondDashLayer : public CCLayer, public DynamicScrollDelegate {
 protected:
@@ -305,32 +282,27 @@ public:
 
     static CCScene* scene() {
         auto scene = CCScene::create();
-        auto layer = BeyondDashLayer::create();
-        scene->addChild(layer);
+        scene->addChild(BeyondDashLayer::create());
         return scene;
     }
 
-    // Reverted to your original logic that compiled correctly
     void update(float dt) override {
         if (m_scrollLayer) {
-            this->scrollLayerMoved(m_scrollLayer->getPosition());
+            scrollLayerMoved(m_scrollLayer->getPosition());
         }
     }
 
     void scrollLayerMoved(cocos2d::CCPoint p0) {
         if (m_scrollLayer) {
-            auto winSize = CCDirector::sharedDirector()->getWinSize();
-            float page = -p0.x / winSize.width;
-            this->updateCustomColor(page);
+            auto winSize = CCDirector::get()->getWinSize();
+            updateCustomColor(-p0.x / winSize.width);
         }
     }
 
     void updatePageWithObject(CCObject* o, CCObject* object) override {}
 
     void onBack(CCObject*) {
-        CCDirector::sharedDirector()->replaceScene(
-            CCTransitionFade::create(0.5f, MenuLayer::scene(false))
-        );
+        CCDirector::get()->replaceScene(CCTransitionFade::create(0.5f, MenuLayer::scene(false)));
     }
 
     void onPrev(CCObject*) {
@@ -348,11 +320,10 @@ public:
     }
 
     void onPlayLevel(CCObject* sender) {
-        auto btn = static_cast<CCNode*>(sender);
-        int index = btn->getTag();
+        int index = sender->getTag();
         if (index < 0 || index >= m_levels.size()) return;
 
-        LevelDef def = m_levels[index];
+        auto def = m_levels[index];
         int songID = def.songIDs.empty() ? 0 : def.songIDs[0];
 
         m_activeLauncher = LevelLauncher::create(def.id, songID);
@@ -360,110 +331,103 @@ public:
     }
 
     void onOpenMusicPopup(CCObject* sender) {
-        auto btn = static_cast<CCNode*>(sender);
-        int index = btn->getTag();
-        if (index < 0 || index >= m_levels.size()) return;
-
-        LevelDef def = m_levels[index];
-        SongListPopup::create(def)->show();
+        int index = sender->getTag();
+        if (index >= 0 && index < m_levels.size()) {
+            SongListPopup::create(m_levels[index])->show();
+        }
     }
 
     void updateCustomColor(float pagePosition) {
         if (!m_bg || m_levels.empty()) return;
 
         int count = m_levels.size();
-        auto safeMod = [](int n, int m) { return ((n % m) + m) % m; };
 
-        if (pagePosition < 0) pagePosition = 0;
-        if (pagePosition > count - 1) pagePosition = count - 1;
+        // clamp bounds
+        pagePosition = std::clamp(pagePosition, 0.0f, (float)(count - 1));
 
         int index = std::floor(pagePosition);
         float percent = pagePosition - index;
 
-        int currentIdx = safeMod(index, count);
-        int nextIdx = safeMod(index + 1, count);
+        int currentIdx = index % count;
+        int nextIdx = (index + 1) % count;
 
         ccColor3B col1 = m_levels[currentIdx].color;
         ccColor3B col2 = m_levels[nextIdx].color;
 
-        GLubyte r = col1.r + (GLubyte)((col2.r - col1.r) * percent);
-        GLubyte g = col1.g + (GLubyte)((col2.g - col1.g) * percent);
-        GLubyte b = col1.b + (GLubyte)((col2.b - col1.b) * percent);
-
-        m_bg->setColor({ r, g, b });
+        m_bg->setColor({
+            (GLubyte)(col1.r + (col2.r - col1.r) * percent),
+            (GLubyte)(col1.g + (col2.g - col1.g) * percent),
+            (GLubyte)(col1.b + (col2.b - col1.b) * percent)
+            });
     }
 
     bool init() override {
         if (!CCLayer::init()) return false;
 
-        m_levels = LevelManager::getLevels();
-        auto winSize = CCDirector::sharedDirector()->getWinSize();
+        m_levels = LevelData::get();
+        auto winSize = CCDirector::get()->getWinSize();
 
-        auto bg = CCSprite::create("game_bg_01_001.png");
-        bg->setPosition(winSize / 2);
+        m_bg = CCSprite::create("game_bg_01_001.png");
+        m_bg->setPosition(winSize / 2);
 
-        if (bg->getContentSize().width > 0) {
-            float scaleX = winSize.width / bg->getContentSize().width;
-            float scaleY = winSize.height / bg->getContentSize().height;
-            bg->setScale(std::max(scaleX, scaleY));
+        if (m_bg->getContentSize().width > 0) {
+            float scaleX = winSize.width / m_bg->getContentSize().width;
+            float scaleY = winSize.height / m_bg->getContentSize().height;
+            m_bg->setScale(std::max(scaleX, scaleY));
         }
 
-        bg->setColor({ 0, 0, 0 });
-        this->addChild(bg, -2);
-        m_bg = bg;
+        m_bg->setColor({ 0, 0, 0 });
+        addChild(m_bg, -2);
 
         auto pages = CCArray::create();
         int idx = 0;
-        this->scheduleUpdate();
+        scheduleUpdate();
 
         for (const auto& data : m_levels) {
-            auto level = LevelManager::createLevelObject(data);
+            auto level = LevelData::buildGameLevel(data);
             auto pageLayer = LevelPage::create(level);
             pageLayer->updateDynamicPage(level);
 
             if (auto menu = pageLayer->getChildByType<CCMenu>(0)) {
-                // Hook up the existing play button
+                // hijack the play button
                 if (auto btn = menu->getChildByType<CCMenuItemSpriteExtra>(0)) {
                     btn->setTarget(this, menu_selector(BeyondDashLayer::onPlayLevel));
                     btn->setTag(idx);
                 }
 
-                // Add the new "Music" button
-                auto musicBtnSpr = ButtonSprite::create("Music", 0, false, "goldFont.fnt", "GJ_button_02.png", 0, 0.6f);
-                auto musicBtn = CCMenuItemSpriteExtra::create(musicBtnSpr, this, menu_selector(BeyondDashLayer::onOpenMusicPopup));
+                // add music button to the bottom leftish
+                auto musicBtn = CCMenuItemSpriteExtra::create(
+                    ButtonSprite::create("Music", 0, false, "goldFont.fnt", "GJ_button_02.png", 0, 0.6f),
+                    this, menu_selector(BeyondDashLayer::onOpenMusicPopup)
+                );
                 musicBtn->setTag(idx);
-
-                // Position it in the bottom right corner of the screen
-                float btnX = (winSize.width / 2) - 55.0f;
-                float btnY = -(winSize.height / 2) + 35.0f;
-                musicBtn->setPosition({ btnX, btnY });
-
+                musicBtn->setPosition({ (winSize.width / 2) - 55.0f, -(winSize.height / 2) + 35.0f });
                 menu->addChild(musicBtn);
             }
             pages->addObject(pageLayer);
             idx++;
         }
 
-        auto boomScroll = BoomScrollLayer::create(pages, 0, true, pages, this);
-        this->addChild(boomScroll, 10);
-        m_scrollLayer = boomScroll;
-        boomScroll->updatePages();
-        boomScroll->moveToPage(0);
+        m_scrollLayer = BoomScrollLayer::create(pages, 0, true, pages, this);
+        addChild(m_scrollLayer, 10);
+        m_scrollLayer->updatePages();
+        m_scrollLayer->moveToPage(0);
 
-        this->updateCustomColor(0.0f);
+        updateCustomColor(0.0f);
 
+        // ui setup
         auto uiMenu = CCMenu::create();
 
-        auto backSprite = CCSprite::createWithSpriteFrameName("GJ_arrow_01_001.png");
         auto backBtn = CCMenuItemSpriteExtra::create(
-            backSprite, this, menu_selector(BeyondDashLayer::onBack)
+            CCSprite::createWithSpriteFrameName("GJ_arrow_01_001.png"),
+            this, menu_selector(BeyondDashLayer::onBack)
         );
         backBtn->setPosition(-winSize.width / 2 + 25, winSize.height / 2 - 25);
         uiMenu->addChild(backBtn);
 
-        auto leftSpr = CCSprite::createWithSpriteFrameName("GJ_arrow_03_001.png");
         auto leftBtn = CCMenuItemSpriteExtra::create(
-            leftSpr, this, menu_selector(BeyondDashLayer::onPrev)
+            CCSprite::createWithSpriteFrameName("GJ_arrow_03_001.png"),
+            this, menu_selector(BeyondDashLayer::onPrev)
         );
         leftBtn->setPosition(-winSize.width / 2 + 30, 0);
         uiMenu->addChild(leftBtn);
@@ -476,54 +440,45 @@ public:
         rightBtn->setPosition(winSize.width / 2 - 30, 0);
         uiMenu->addChild(rightBtn);
 
-        this->addChild(uiMenu, 20);
+        addChild(uiMenu, 20);
 
-        this->setKeypadEnabled(true);
-        this->setTouchEnabled(true);
+        setKeypadEnabled(true);
+        setTouchEnabled(true);
 
         return true;
     }
 
     void keyBackClicked() override {
-        this->onBack(nullptr);
+        onBack(nullptr);
     }
 };
 
-// =================================================================
-// 5. HOOK: MENU LAYER (Entry Point)
-// =================================================================
-
 class $modify(BeyondDashMenu, MenuLayer) {
     void onBeyondDash(CCObject * sender) {
-        CCDirector::sharedDirector()->replaceScene(
-            CCTransitionFade::create(0.5f, BeyondDashLayer::scene())
-        );
+        CCDirector::get()->replaceScene(CCTransitionFade::create(0.5f, BeyondDashLayer::scene()));
     }
 
     bool init() {
         if (!MenuLayer::init()) return false;
 
-        auto spr = ButtonSprite::create(
-            "Beyond Dash", 0, false, "goldFont.fnt", "GJ_button_01.png", 0, 0.8f
-        );
-
         auto btn = CCMenuItemSpriteExtra::create(
-            spr, this, menu_selector(BeyondDashMenu::onBeyondDash)
+            ButtonSprite::create("Beyond Dash", 0, false, "goldFont.fnt", "GJ_button_01.png", 0, 0.8f),
+            this, menu_selector(BeyondDashMenu::onBeyondDash)
         );
 
         auto menu = CCMenu::create();
         menu->addChild(btn);
         menu->setID("beyond-dash-menu"_spr);
 
-        auto winSize = CCDirector::sharedDirector()->getWinSize();
-        if (auto bottomMenu = this->getChildByID("bottom-menu")) {
+        auto winSize = CCDirector::get()->getWinSize();
+        if (auto bottomMenu = getChildByID("bottom-menu")) {
             menu->setPosition(winSize.width / 2, bottomMenu->getPositionY() + 60);
         }
         else {
             menu->setPosition(winSize.width / 2, 100);
         }
 
-        this->addChild(menu);
+        addChild(menu);
         return true;
     }
 };

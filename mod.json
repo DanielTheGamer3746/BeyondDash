@@ -11,12 +11,6 @@
 	"version": "v1.3.0",
 	"developer": "DanielTheGamer",
 	"description": "Adds new main levels!",
-	"binary": {
-		"win": "danielthegamer.beyond-dash.dll",
-		"android": "danielthegamer.beyond-dash.so",
-		"mac": "danielthegamer.beyond-dash.dylib",
-		"ios": "danielthegamer.beyond-dash.dylib"
-	},
 	"dependencies": {
 		"geode.node-ids": ">=v1.20.0"
 	}
